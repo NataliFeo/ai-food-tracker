@@ -1,5 +1,5 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState} from 'react';
 import {ArrowLeft,ArrowRight,ArrowUpRight,BookOpen,Camera,Check,ChevronLeft,ChevronRight,Flame,Home,Leaf,LoaderCircle,Plus,Settings2,Sparkles,Sun,Trash2,User,Utensils,X,Download,PenLine,ShieldCheck,ImagePlus} from 'lucide-react';
 import {empty,entrySchema,foodSchema,goalNames,localDate,profileSchema,sumFoods,targets,type Entry,type Food,type Macros,type Meal,type Profile} from '@/lib/nutrition';
 
@@ -11,9 +11,10 @@ function Sprig({className=''}:{className?:string}){return <svg className={classN
 function Brand(){return <div className="brand"><span className="brand-icon"><Leaf size={29} strokeWidth={1.5}/></span><div><strong>AI Food Tracker</strong><small>Питание в гармонии с собой</small></div></div>}
 function Totals({value}:{value:Macros}){return <div className="tiny-macros"><span>Б <b>{round(value.protein)}</b> г</span><span>Ж <b>{round(value.fat)}</b> г</span><span>У <b>{round(value.carbs)}</b> г</span></div>}
 function Modal({title,close,children,wide=false}:{title:string;close:()=>void;children:React.ReactNode;wide?:boolean}) {
+ const titleId=useId();
  const ref=useRef<HTMLDialogElement>(null);
  useEffect(()=>{const dialog=ref.current;dialog?.showModal();return()=>{dialog?.close();};},[]);
- return <dialog ref={ref} className={`modal ${wide?'wide':''}`} onCancel={close} onClick={e=>{if(e.target===e.currentTarget)close();}}><div className="modal-header"><h2>{title}</h2><button className="icon-btn" aria-label="Закрыть" onClick={close}><X size={22}/></button></div>{children}</dialog>;
+ return <dialog ref={ref} aria-labelledby={titleId} className={`modal ${wide?'wide':''}`} onCancel={close} onClick={e=>{if(e.target===e.currentTarget)close();}}><div className="modal-header"><h2 id={titleId}>{title}</h2><button className="icon-btn" aria-label="Закрыть" onClick={close}><X size={22}/></button></div>{children}</dialog>;
 }
 function ProfileForm({value,onSave,onCancel}:{value:Profile;onSave:(v:Profile)=>void;onCancel:()=>void}){
  const [form,setForm]=useState(value);const [error,setError]=useState('');
@@ -59,7 +60,7 @@ export default function Page(){
  const dateLabel=new Date(date+'T12:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
  const isToday=date===localDate();
  function changeDate(amount:number){const d=new Date(date+'T12:00:00');d.setDate(d.getDate()+amount);setDate(localDate(d));setError('');}
- async function request(path:string,body:unknown){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(55000)});const result=await r.json();if(!r.ok)throw Error(result.error||'Не удалось выполнить запрос.');return result as Meal;}
+ async function request(path:string,body:unknown){let r:Response;try{r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(55000)});}catch{throw Error('Не удалось связаться с AI. Проверьте соединение и попробуйте позже.');}let result;try{result=await r.json();}catch{throw Error(r.status===429?'Слишком много запросов. Подождите минуту и попробуйте снова.':'Сервис временно недоступен. Попробуйте позже.');}if(!r.ok)throw Error(result.error||'Не удалось выполнить запрос.');return result as Meal;}
  async function analyze(){if(!profile){setProfileOpen(true);return;}if(!text.trim()&&!photo){inputRef.current?.focus();return;}setBusy('analyze');setError('');try{const meal=await request('/api/analyze',{text,image:photo});if(!meal.items.length){setError(meal.note||'На фото не удалось найти еду. Добавьте описание.');return;}setReview(meal);setEditing(undefined);}catch(e){setError(e instanceof Error?e.message:'Не удалось выполнить запрос.');}finally{setBusy('');}}
  async function recommend(){if(!profile){setProfileOpen(true);return;}setBusy('recommend');setError('');try{const result=await request('/api/recommend',{remaining:Object.fromEntries(Object.entries(remaining).map(([k,v])=>[k,round(v)]))});if(sumFoods(result.items).kcal>remaining.kcal+10){setError('Предложение не вписалось в остаток. Попробуйте уменьшить порции вручную.');}setSuggestion(result);setSuggestionKey(contextKey);}catch(e){setError(e instanceof Error?e.message:'Не удалось получить совет.');}finally{setBusy('');}}
  function manual(){if(!profile){setProfileOpen(true);return;}setEditing(undefined);setReview({title:'Моё блюдо',note:'Ручное добавление. Введите КБЖУ на 100 г с упаковки.',items:[]});}
